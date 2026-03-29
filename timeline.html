@@ -1,0 +1,963 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ELEC 518 — Monte Carlo Photon Transport</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500&family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0B0C0F;
+    --bg2: #111318;
+    --bg3: #181B22;
+    --border: rgba(255,255,255,0.07);
+    --border2: rgba(255,255,255,0.12);
+    --text: #E8E6DF;
+    --muted: #7A7870;
+    --faint: #3A3830;
+    --a: #F2A623;
+    --a-dim: rgba(242,166,35,0.12);
+    --a-border: rgba(242,166,35,0.3);
+    --b: #3DD68C;
+    --b-dim: rgba(61,214,140,0.1);
+    --b-border: rgba(61,214,140,0.28);
+    --both: #8B8EF5;
+    --both-dim: rgba(139,142,245,0.1);
+    --both-border: rgba(139,142,245,0.28);
+    --mono: 'IBM Plex Mono', monospace;
+    --serif: 'DM Serif Display', serif;
+    --sans: 'DM Sans', sans-serif;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 15px;
+    line-height: 1.7;
+    font-weight: 300;
+    background-image:
+      linear-gradient(rgba(255,255,255,0.018) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,0.018) 1px, transparent 1px);
+    background-size: 40px 40px;
+  }
+
+  .page {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 60px 32px 100px;
+  }
+
+  /* ── Header ── */
+  .header {
+    border-bottom: 1px solid var(--border2);
+    padding-bottom: 36px;
+    margin-bottom: 52px;
+  }
+
+  .course-tag {
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 400;
+    color: var(--a);
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    margin-bottom: 16px;
+  }
+
+  h1 {
+    font-family: var(--serif);
+    font-size: 44px;
+    font-weight: 400;
+    line-height: 1.15;
+    color: var(--text);
+    margin-bottom: 14px;
+  }
+
+  h1 em {
+    font-style: italic;
+    color: rgba(232,230,223,0.6);
+  }
+
+  .header-meta {
+    display: flex;
+    gap: 24px;
+    flex-wrap: wrap;
+    margin-top: 20px;
+  }
+
+  .meta-item {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+    letter-spacing: .06em;
+  }
+
+  .meta-item span {
+    color: var(--text);
+    font-weight: 500;
+  }
+
+  /* ── Sections ── */
+  .section {
+    margin-bottom: 56px;
+  }
+
+  .section-label {
+    font-family: var(--mono);
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: .15em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 20px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .section-label::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--border);
+  }
+
+  h2 {
+    font-family: var(--serif);
+    font-size: 26px;
+    font-weight: 400;
+    color: var(--text);
+    margin-bottom: 12px;
+    line-height: 1.3;
+  }
+
+  h3 {
+    font-family: var(--sans);
+    font-size: 13px;
+    font-weight: 500;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 10px;
+    margin-top: 24px;
+  }
+
+  p {
+    color: rgba(232,230,223,0.8);
+    margin-bottom: 12px;
+  }
+
+  code {
+    font-family: var(--mono);
+    font-size: 12.5px;
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    padding: 1px 6px;
+    border-radius: 4px;
+    color: var(--a);
+  }
+
+  /* ── Question cards ── */
+  .q-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-top: 4px;
+  }
+
+  .q-card {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 20px 22px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .q-card.bonus {
+    grid-column: 1 / -1;
+    border-color: var(--both-border);
+    background: var(--both-dim);
+  }
+
+  .q-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0;
+    width: 3px; height: 100%;
+    border-radius: 10px 0 0 10px;
+  }
+
+  .q-card.q1::before { background: var(--a); }
+  .q-card.q2::before { background: var(--b); }
+  .q-card.bonus::before { background: var(--both); }
+
+  .q-num {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--muted);
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+
+  .q-title {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text);
+    margin-bottom: 10px;
+    line-height: 1.4;
+  }
+
+  .q-body {
+    font-size: 13px;
+    color: rgba(232,230,223,0.6);
+    line-height: 1.6;
+    margin-bottom: 0;
+  }
+
+  .q-sub {
+    margin-top: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .q-sub-item {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+    display: flex;
+    gap: 8px;
+  }
+
+  .q-sub-item .letter {
+    color: var(--b);
+    font-weight: 500;
+  }
+
+  /* ── Physics concepts ── */
+  .concept-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+
+  .concept-card {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 18px 20px;
+  }
+
+  .concept-card .concept-title {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--a);
+    font-weight: 500;
+    margin-bottom: 8px;
+  }
+
+  .concept-card p {
+    font-size: 13px;
+    line-height: 1.6;
+    color: rgba(232,230,223,0.65);
+    margin-bottom: 0;
+  }
+
+  .formula-block {
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--a);
+    border-radius: 0 8px 8px 0;
+    padding: 14px 18px;
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--a);
+    margin: 14px 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .formula-block .f-comment {
+    color: var(--muted);
+    font-size: 11px;
+  }
+
+  /* ── Code architecture ── */
+  .func-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+
+  .func-table th {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--muted);
+    text-align: left;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border2);
+    font-weight: 400;
+  }
+
+  .func-table td {
+    padding: 9px 12px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+  }
+
+  .func-table tr:last-child td { border-bottom: none; }
+
+  .func-table td:first-child {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--a);
+    white-space: nowrap;
+  }
+
+  .func-table td:nth-child(2) {
+    color: rgba(232,230,223,0.7);
+    line-height: 1.5;
+  }
+
+  .func-table td:last-child {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--muted);
+    white-space: nowrap;
+  }
+
+  .owner-a { color: var(--a) !important; }
+  .owner-b { color: var(--b) !important; }
+
+  /* ── Timeline ── */
+  .week-block {
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+    margin-bottom: 14px;
+  }
+
+  .week-header {
+    padding: 14px 20px;
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .week-block.w1 .week-header { background: rgba(242,166,35,0.06); }
+  .week-block.w2 .week-header { background: rgba(61,214,140,0.05); }
+  .week-block.w3 .week-header { background: rgba(139,142,245,0.05); }
+
+  .wnum {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--muted);
+    letter-spacing: .1em;
+    text-transform: uppercase;
+  }
+
+  .wtitle {
+    font-size: 15px;
+    font-weight: 500;
+    color: var(--text);
+  }
+
+  .whours {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+    margin-left: auto;
+  }
+
+  .person-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .pcol {
+    padding: 16px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+  }
+
+  .pcol:first-child {
+    border-right: 1px solid var(--border);
+  }
+
+  .plabel {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    font-weight: 500;
+    margin-bottom: 4px;
+  }
+
+  .pcol.pa .plabel { color: var(--a); }
+  .pcol.pb .plabel { color: var(--b); }
+
+  .task-item {
+    display: flex;
+    gap: 8px;
+    align-items: flex-start;
+    font-size: 13px;
+    color: rgba(232,230,223,0.75);
+    line-height: 1.5;
+  }
+
+  .task-dot {
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    margin-top: 7px;
+    flex-shrink: 0;
+  }
+
+  .pa .task-dot { background: var(--a); }
+  .pb .task-dot { background: var(--b); }
+
+  .sync-bar {
+    padding: 10px 20px;
+    border-top: 1px solid var(--border);
+    background: var(--bg3);
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+    font-size: 13px;
+  }
+
+  .sync-tag {
+    font-family: var(--mono);
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: var(--muted);
+    white-space: nowrap;
+    margin-top: 2px;
+    flex-shrink: 0;
+  }
+
+  .sync-text {
+    color: rgba(232,230,223,0.6);
+    line-height: 1.5;
+  }
+
+  .deliverables-bar {
+    padding: 12px 20px;
+    border-top: 1px solid var(--border);
+    background: var(--bg2);
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+
+  .deliver-label {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--muted);
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    white-space: nowrap;
+    margin-right: 4px;
+  }
+
+  .chip {
+    font-family: var(--mono);
+    font-size: 11px;
+    padding: 3px 9px;
+    border-radius: 20px;
+    font-weight: 400;
+  }
+
+  .chip-a { background: rgba(242,166,35,0.12); color: var(--a); border: 1px solid var(--a-border); }
+  .chip-b { background: rgba(61,214,140,0.1); color: var(--b); border: 1px solid var(--b-border); }
+  .chip-both { background: rgba(139,142,245,0.1); color: var(--both); border: 1px solid var(--both-border); }
+
+  /* ── Warnings / callouts ── */
+  .callout {
+    border: 1px solid var(--border);
+    border-left: 3px solid;
+    border-radius: 0 8px 8px 0;
+    padding: 13px 16px;
+    margin: 14px 0;
+    font-size: 13px;
+    color: rgba(232,230,223,0.7);
+    line-height: 1.6;
+  }
+
+  .callout.warn { border-left-color: var(--a); background: var(--a-dim); }
+  .callout.info { border-left-color: var(--b); background: var(--b-dim); }
+
+  .callout strong {
+    font-weight: 500;
+    color: var(--text);
+  }
+
+  /* ── Reference section ── */
+  .ref-card {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 18px 20px;
+    display: flex;
+    gap: 16px;
+    align-items: flex-start;
+  }
+
+  .ref-icon {
+    font-family: var(--mono);
+    font-size: 18px;
+    color: var(--muted);
+    flex-shrink: 0;
+    margin-top: 2px;
+  }
+
+  .ref-title {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text);
+    margin-bottom: 4px;
+  }
+
+  .ref-url {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--a);
+    text-decoration: none;
+    opacity: 0.8;
+  }
+
+  .ref-url:hover { opacity: 1; text-decoration: underline; }
+
+  .ref-desc {
+    font-size: 13px;
+    color: rgba(232,230,223,0.6);
+    margin-top: 6px;
+    margin-bottom: 0;
+    line-height: 1.5;
+  }
+
+  /* ── Footer ── */
+  .footer {
+    border-top: 1px solid var(--border);
+    padding-top: 28px;
+    margin-top: 60px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: gap;
+  }
+
+  .footer-text {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+  }
+
+  .legend {
+    display: flex;
+    gap: 18px;
+  }
+
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+  }
+
+  .legend-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  /* ── Responsive ── */
+  @media (max-width: 640px) {
+    h1 { font-size: 30px; }
+    .q-grid { grid-template-columns: 1fr; }
+    .q-card.bonus { grid-column: auto; }
+    .concept-grid { grid-template-columns: 1fr; }
+    .person-row { grid-template-columns: 1fr; }
+    .pcol:first-child { border-right: none; border-bottom: 1px solid var(--border); }
+    .page { padding: 32px 18px 80px; }
+  }
+
+  /* ── Subtle fade-in ── */
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(12px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .section {
+    animation: fadeUp .45s ease both;
+  }
+
+  .section:nth-child(1) { animation-delay: .05s; }
+  .section:nth-child(2) { animation-delay: .12s; }
+  .section:nth-child(3) { animation-delay: .18s; }
+  .section:nth-child(4) { animation-delay: .24s; }
+  .section:nth-child(5) { animation-delay: .30s; }
+  .section:nth-child(6) { animation-delay: .36s; }
+  .section:nth-child(7) { animation-delay: .42s; }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <!-- Header -->
+  <div class="header section">
+    <div class="course-tag">Rice University · ELEC 418 / 518 · Spring 2026</div>
+    <h1>Monte Carlo <em>Photon Transport</em></h1>
+    <p>Project brief, physics context, code architecture, and 3-week timeline for 2-person team.</p>
+    <div class="header-meta">
+      <div class="meta-item">Language <span>C / C++ (or Python)</span></div>
+      <div class="meta-item">Reference <span>OMLC MCML source</span></div>
+      <div class="meta-item">Target <span>10⁵ – 10⁶ photons</span></div>
+      <div class="meta-item">Due <span>~3 weeks out</span></div>
+    </div>
+  </div>
+
+  <!-- Questions -->
+  <div class="section">
+    <div class="section-label">Assignments</div>
+    <div class="q-grid">
+
+      <div class="q-card q1">
+        <div class="q-num">Problem 3.09 · Analytical</div>
+        <div class="q-title">Poisson distribution of scattering events</div>
+        <p class="q-body">Show that the number of scattering events in path length <em>s</em> follows the Poisson distribution. Neglect absorption.</p>
+        <div class="callout info" style="margin-top:12px;margin-bottom:0;font-size:12px;">
+          This is pen-and-paper only. Do it first — it directly proves why the step-size sampler <code>s = -ln(ζ)/μ<sub>t</sub></code> is correct.
+        </div>
+      </div>
+
+      <div class="q-card q2">
+        <div class="q-num">Problem 3.10 · Simulation</div>
+        <div class="q-title">MC simulation in semi-infinite scattering medium</div>
+        <p class="q-body">Implement photon transport with Henyey-Greenstein phase function. Inputs: <code>n_rel</code>, <code>μ<sub>a</sub></code>, <code>μ<sub>s</sub></code>, <code>g</code>. Outputs: total reflectance R and depth-resolved fluence.</p>
+        <div class="q-sub">
+          <div class="q-sub-item"><span class="letter">a)</span> Verify against Table 3.2</div>
+          <div class="q-sub-item"><span class="letter">b)</span> Run: n_rel=1.37, μ<sub>a</sub>=0.1 cm⁻¹, μ<sub>s</sub>=100 cm⁻¹, g=0.9</div>
+          <div class="q-sub-item"><span class="letter">c)</span> Reproduce Figure 3.5</div>
+        </div>
+      </div>
+
+      <div class="q-card bonus">
+        <div class="q-num">Bonus · Statistical equivalence</div>
+        <div class="q-title">Show two algorithms are statistically identical</div>
+        <p class="q-body">Use <code>n_rel=1</code>, <code>μ<sub>a</sub>=0.1 cm⁻¹</code>, <code>μ<sub>s</sub>=100 cm⁻¹</code>, <code>g=0.9</code>. Compare total diffuse reflectance R and total absorption using a statistical test (t-test).</p>
+        <div class="q-sub" style="margin-top:10px;">
+          <div class="q-sub-item" style="color:var(--both)"><span class="letter" style="color:var(--both)">a)</span> Step: <code>s = -ln(ζ)/μ<sub>t</sub></code> &nbsp;&nbsp; Weight loss: <code>ΔW = (μ<sub>a</sub>/μ<sub>t</sub>)·W</code></div>
+          <div class="q-sub-item" style="color:var(--both)"><span class="letter" style="color:var(--both)">b)</span> Step: <code>s = -ln(ζ)/μ<sub>s</sub></code> &nbsp;&nbsp; Weight loss: <code>ΔW = W·[1 − exp(−μ<sub>a</sub>·s)]</code></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Physics -->
+  <div class="section">
+    <div class="section-label">Key physics concepts</div>
+
+    <div class="concept-grid">
+      <div class="concept-card">
+        <div class="concept-title">Fluence (depth-resolved)</div>
+        <p>Total radiant energy per unit area (J/cm²) at a point inside the tissue. In the simulation, it's the sum of absorbed weight in each depth bin, normalized by bin volume and photon count. Tells you how light distributes with depth — not just what escapes.</p>
+      </div>
+      <div class="concept-card">
+        <div class="concept-title">Henyey-Greenstein phase function</div>
+        <p>Describes the angular distribution of scattering. Parameterized by <code>g</code> (anisotropy factor). <code>g=0</code> = isotropic, <code>g→1</code> = forward-peaked. Used to sample the polar deflection angle θ at each scatter event.</p>
+      </div>
+      <div class="concept-card">
+        <div class="concept-title">Photon weight W</div>
+        <p>Each photon starts with <code>W=1</code>. At each step a fraction is "absorbed" — dropped into the fluence array. Russian roulette terminates photons with very small W to keep computation finite without biasing statistics.</p>
+      </div>
+      <div class="concept-card">
+        <div class="concept-title">Fresnel boundary</div>
+        <p>When a photon hits the surface from inside, it either exits (scored as reflectance) or reflects back depending on the incident angle and <code>n_rel</code>. Total internal reflection occurs beyond the critical angle. Specular reflection is handled separately at launch.</p>
+      </div>
+    </div>
+
+    <h3>Core formulas</h3>
+
+    <div class="formula-block">
+      <div>s = −ln(ζ) / μ<sub>t</sub></div>
+      <div class="f-comment">// Step size sampling — ζ is uniform random [0,1], μ_t = μ_a + μ_s</div>
+    </div>
+
+    <div class="formula-block">
+      <div>ΔW = W · μ<sub>a</sub> / μ<sub>t</sub></div>
+      <div class="f-comment">// Weight dropped per step (algorithm a) — scored into fluence[iz]</div>
+    </div>
+
+    <div class="formula-block">
+      <div>cos(θ) = [1 + g² − ((1−g²)/(1−g+2g·ζ))²] / (2g)&nbsp;&nbsp;&nbsp;for g ≠ 0</div>
+      <div class="f-comment">// Henyey-Greenstein polar deflection angle — from SpinTheta() in mcmlgo.c</div>
+    </div>
+
+    <div class="formula-block">
+      <div>fluence[iz] += ΔW</div>
+      <div>fluence[iz] /= (dz · N_photons)&nbsp;&nbsp;&nbsp;← normalize after loop</div>
+      <div class="f-comment">// Depth-resolved fluence scoring — dz is bin width in cm</div>
+    </div>
+
+    <div class="callout warn">
+      <strong>Normalization is the most common mistake.</strong> Divide by both <code>dz</code> and <code>N_photons</code>. Forgetting one gives a result that's off by a constant factor — the shape looks right but Table 3.2 won't match.
+    </div>
+  </div>
+
+  <!-- Code architecture -->
+  <div class="section">
+    <div class="section-label">Code architecture — mapped from MCML</div>
+    <p style="margin-bottom:16px;">MCML handles multi-layer geometry. You only need semi-infinite (one layer, no bottom boundary). Strip it down. Each function below maps directly to a function in <code>mcmlgo.c</code>.</p>
+
+    <table class="func-table">
+      <thead>
+        <tr>
+          <th>Function</th>
+          <th>What it does</th>
+          <th>Owner</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>StepSizeInTissue()</td>
+          <td>Sample step size <code>s = −ln(ζ)/μ_t</code>. Handle leftover step (sleft) from boundary hits.</td>
+          <td class="owner-a">Person A</td>
+        </tr>
+        <tr>
+          <td>Hop()</td>
+          <td>Move photon by <code>s</code> along direction (ux, uy, uz). Trivially: x += s·ux, y += s·uy, z += s·uz.</td>
+          <td class="owner-a">Person A</td>
+        </tr>
+        <tr>
+          <td>SpinTheta(g)</td>
+          <td>Sample polar deflection angle via Henyey-Greenstein. Returns cos(θ).</td>
+          <td class="owner-a">Person A</td>
+        </tr>
+        <tr>
+          <td>Spin(g)</td>
+          <td>Sample azimuthal angle ψ uniformly [0, 2π] and update (ux, uy, uz) direction cosines.</td>
+          <td class="owner-a">Person A</td>
+        </tr>
+        <tr>
+          <td>Drop()</td>
+          <td>Compute <code>ΔW = W·μ_a/μ_t</code>, subtract from W, add to <code>fluence[iz]</code>.</td>
+          <td class="owner-a">Person A</td>
+        </tr>
+        <tr>
+          <td>Roulette()</td>
+          <td>When W is small (below threshold), kill photon or boost W by 1/CHANCE to conserve energy expectation.</td>
+          <td class="owner-a">Person A</td>
+        </tr>
+        <tr>
+          <td>Rspecular()</td>
+          <td>Compute specular Fresnel reflectance at launch. Subtract from initial W before photon enters tissue.</td>
+          <td class="owner-b">Person B</td>
+        </tr>
+        <tr>
+          <td>RFresnel()</td>
+          <td>General Fresnel reflectance formula — handles normal, slant, and total internal reflection cases.</td>
+          <td class="owner-b">Person B</td>
+        </tr>
+        <tr>
+          <td>CrossUpOrNot()</td>
+          <td>When photon hits the top surface going up: probabilistically transmit (score as R, kill photon) or reflect back down.</td>
+          <td class="owner-b">Person B</td>
+        </tr>
+        <tr>
+          <td>LaunchPhoton()</td>
+          <td>Init photon: x=y=z=0, direction uz=1.0, W = 1 − Rspecular.</td>
+          <td class="owner-b">Person B</td>
+        </tr>
+        <tr>
+          <td>Main photon loop</td>
+          <td>While photon is not dead: StepSize → HitBoundary? → Hop → Drop → Spin → Roulette.</td>
+          <td class="owner-b">Person B</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Timeline -->
+  <div class="section">
+    <div class="section-label">3-week timeline</div>
+
+    <!-- Legend -->
+    <div style="display:flex;gap:18px;margin-bottom:18px;flex-wrap:wrap;">
+      <div class="legend-item"><div class="legend-dot" style="background:var(--a)"></div> Person A</div>
+      <div class="legend-item"><div class="legend-dot" style="background:var(--b)"></div> Person B</div>
+      <div class="legend-item"><div class="legend-dot" style="background:var(--both)"></div> Both / shared</div>
+    </div>
+
+    <!-- Week 1 -->
+    <div class="week-block w1">
+      <div class="week-header">
+        <span class="wnum">Week 1</span>
+        <span class="wtitle">Build everything</span>
+        <span class="whours">~3–4 hrs each</span>
+      </div>
+      <div class="person-row">
+        <div class="pcol pa">
+          <div class="plabel">Person A</div>
+          <div class="task-item"><span class="task-dot"></span>Q1 derivation — prove Poisson from μ_s definition (pen + paper, ~1 hr)</div>
+          <div class="task-item"><span class="task-dot"></span>StepSizeInTissue — s = −ln(ζ)/μ_t, handle sleft for boundary</div>
+          <div class="task-item"><span class="task-dot"></span>Hop — move photon along (ux, uy, uz)</div>
+          <div class="task-item"><span class="task-dot"></span>SpinTheta + Spin — H-G deflection + azimuthal rotation</div>
+          <div class="task-item"><span class="task-dot"></span>Drop — weight loss ΔW = W·μ_a/μ_t, bin into fluence[iz]</div>
+          <div class="task-item"><span class="task-dot"></span>Roulette — Russian roulette termination</div>
+        </div>
+        <div class="pcol pb">
+          <div class="plabel">Person B</div>
+          <div class="task-item"><span class="task-dot"></span>Rspecular — Fresnel specular reflectance at launch</div>
+          <div class="task-item"><span class="task-dot"></span>RFresnel + CrossUpOrNot — surface boundary, diffuse R scoring</div>
+          <div class="task-item"><span class="task-dot"></span>LaunchPhoton — init position, direction, weight</div>
+          <div class="task-item"><span class="task-dot"></span>Reflectance accumulator R</div>
+          <div class="task-item"><span class="task-dot"></span>Fluence array fluence[iz] with bin width dz</div>
+          <div class="task-item"><span class="task-dot"></span>Main photon loop skeleton (while !dead)</div>
+        </div>
+      </div>
+      <div class="sync-bar">
+        <span class="sync-tag">Sync</span>
+        <span class="sync-text">End of week — integrate A's physics kernel into B's loop. A single photon should run without crashing. This sync is the most important one; don't skip it.</span>
+      </div>
+      <div class="deliverables-bar">
+        <span class="deliver-label">Deliverables</span>
+        <span class="chip chip-a">Q1 written derivation</span>
+        <span class="chip chip-b">Compilable main loop</span>
+        <span class="chip chip-both">Single photon trace runs</span>
+      </div>
+    </div>
+
+    <!-- Week 2 -->
+    <div class="week-block w2">
+      <div class="week-header">
+        <span class="wnum">Week 2</span>
+        <span class="wtitle">Test + produce outputs</span>
+        <span class="whours">~2–3 hrs each</span>
+      </div>
+      <div class="person-row">
+        <div class="pcol pa">
+          <div class="plabel">Person A</div>
+          <div class="task-item"><span class="task-dot"></span>Run 10⁵–10⁶ photons, compare R to Table 3.2 values</div>
+          <div class="task-item"><span class="task-dot"></span>Debug physics issues — wrong g sampling, step size errors, boundary logic</div>
+          <div class="task-item"><span class="task-dot"></span>Bonus: swap in algorithm (a) — s = −ln(ζ)/μ_t, ΔW = (μ_a/μ_t)·W</div>
+          <div class="task-item"><span class="task-dot"></span>Bonus: swap in algorithm (b) — s = −ln(ζ)/μ_s, ΔW = W·[1−exp(−μ_a·s)]</div>
+        </div>
+        <div class="pcol pb">
+          <div class="plabel">Person B</div>
+          <div class="task-item"><span class="task-dot"></span>Normalize fluence array (÷ dz · N_photons) — double check this explicitly</div>
+          <div class="task-item"><span class="task-dot"></span>Q2b — run with n_rel=1.37, μ_a=0.1, μ_s=100, g=0.9</div>
+          <div class="task-item"><span class="task-dot"></span>Plot depth-resolved fluence vs depth in cm</div>
+          <div class="task-item"><span class="task-dot"></span>Reproduce Figure 3.5 — match axis scales and units</div>
+          <div class="task-item"><span class="task-dot"></span>Bonus: t-test on R and total absorption between the two algorithms</div>
+        </div>
+      </div>
+      <div class="sync-bar">
+        <span class="sync-tag">Sync</span>
+        <span class="sync-text">Mid-week check-in — confirm Table 3.2 match before touching Q2b or the bonus. If R is wrong, everything downstream is wrong.</span>
+      </div>
+      <div class="deliverables-bar">
+        <span class="deliver-label">Deliverables</span>
+        <span class="chip chip-a">Table 3.2 verified</span>
+        <span class="chip chip-b">Fig 3.5 reproduced</span>
+        <span class="chip chip-b">Q2b fluence plot</span>
+        <span class="chip chip-both">Bonus t-test result</span>
+      </div>
+    </div>
+
+    <!-- Week 3 -->
+    <div class="week-block w3">
+      <div class="week-header">
+        <span class="wnum">Week 3</span>
+        <span class="wtitle">Finalize + write up</span>
+        <span class="whours">~1–2 hrs each</span>
+      </div>
+      <div class="person-row">
+        <div class="pcol pa">
+          <div class="plabel">Person A</div>
+          <div class="task-item"><span class="task-dot"></span>Clean up code — remove debug prints, add comments on non-obvious lines</div>
+          <div class="task-item"><span class="task-dot"></span>Write Q1 solution clearly for submission</div>
+          <div class="task-item"><span class="task-dot"></span>Write up bonus statistical comparison — state the null hypothesis, report p-value</div>
+        </div>
+        <div class="pcol pb">
+          <div class="plabel">Person B</div>
+          <div class="task-item"><span class="task-dot"></span>Finalize all plots — axis labels, units, captions</div>
+          <div class="task-item"><span class="task-dot"></span>Write Q2 summary — describe inputs, method, outputs, normalization</div>
+          <div class="task-item"><span class="task-dot"></span>Package code + figures for submission</div>
+        </div>
+      </div>
+      <div class="sync-bar">
+        <span class="sync-tag">Sync</span>
+        <span class="sync-text">One final read-through together — make sure every plot matches what the writeup claims. Week 3 is intentionally light; it's buffer if anything slipped in week 2.</span>
+      </div>
+      <div class="deliverables-bar">
+        <span class="deliver-label">Final deliverables</span>
+        <span class="chip chip-both">Q1 derivation</span>
+        <span class="chip chip-both">Q2 code + 3 plots</span>
+        <span class="chip chip-both">Bonus writeup + p-value</span>
+        <span class="chip chip-both">Packaged submission</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Risks -->
+  <div class="section">
+    <div class="section-label">Known risks</div>
+    <div class="callout warn">
+      <strong>Fluence normalization (most likely silent failure).</strong> The simulation runs, the shape looks right, but the absolute values are off by a factor. Always normalize as <code>fluence[iz] /= (dz * N_photons)</code> — not just one of them.
+    </div>
+    <div class="callout warn">
+      <strong>Direction cosine update after spin.</strong> When the photon is traveling nearly straight (|uz| ≈ 1), the standard rotation formula becomes numerically unstable. MCML handles this with a COSZERO branch in <code>Spin()</code> — copy that logic exactly.
+    </div>
+    <div class="callout info">
+      <strong>Bonus is just 3 changed lines.</strong> Swap the step sampler and weight-loss formula in the existing sim, run it twice with different seeds, collect R and total absorbed weight from each run, and do a two-sample t-test. No new architecture needed.
+    </div>
+    <div class="callout info">
+      <strong>Week 1 sync is the critical path.</strong> A's kernel and B's loop need to talk to each other. Don't wait until week 2 to find a struct mismatch or incompatible return value convention.
+    </div>
+  </div>
+
+  <!-- Reference -->
+  <div class="section">
+    <div class="section-label">Reference</div>
+    <div class="ref-card">
+      <div class="ref-icon">[src]</div>
+      <div>
+        <div class="ref-title">OMLC MCML Source Code</div>
+        <a class="ref-url" href="https://omlc.org/software/mc/mcml/mcml-src/index.html" target="_blank">omlc.org/software/mc/mcml/mcml-src/index.html</a>
+        <p class="ref-desc">The canonical reference. Key file is <code>mcmlgo.c</code> — contains LaunchPhoton, StepSizeInTissue, Hop, Drop, Spin, Roulette, RFresnel, CrossUpOrNot. You don't need the multi-layer I/O machinery in <code>mcmlio.c</code> for a semi-infinite medium.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <div class="footer">
+    <div class="footer-text">ELEC 418/518 · Rice University · 2026</div>
+    <div class="legend">
+      <div class="legend-item"><div class="legend-dot" style="background:var(--a)"></div>Person A</div>
+      <div class="legend-item"><div class="legend-dot" style="background:var(--b)"></div>Person B</div>
+      <div class="legend-item"><div class="legend-dot" style="background:var(--both)"></div>Both</div>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>
