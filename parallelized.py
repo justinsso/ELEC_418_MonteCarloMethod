@@ -312,9 +312,9 @@ def run_focused_simulation(zf, N_photons, simulate_scattering=True):
 # ====================================================================
 if __name__ == '__main__':
     # --- Execution & Plotting ---
-    N_PACKETS = 100000000
+    N_PACKETS = 1000000
     # Using a single focal depth (0.1)
-    zf_values = [0.1] 
+    zf_values = [1.1] 
 
     results = {}
     for zf_lt in zf_values:

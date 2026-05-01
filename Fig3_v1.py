@@ -16,7 +16,6 @@ COSZERO = 1.0 - 1e-12
 g = 0.9
 mu_s = 0.01  # 100 cm^-1 = 0.01 um^-1
 mu_a = 1e-5  # 0.1 cm^-1 = 1e-5 um^-1
-mu_t = mu_a + mu_s
 
 # Optical system parameters
 wavelength = 0.570 # um
@@ -29,7 +28,7 @@ dr = 0.1 # um
 dz = 1.0 # um
 lt_prime = 1.0 / (mu_s * (1.0 - g) + mu_a) # Transport mean free path (~990 um)
 Nr = 500  
-Nz = 3500 # Increased to 3500 to safely accommodate zf = 3.0 lt' (~2970 um)
+Nz = 3500 
 
 def LaunchHyperboloidPhoton(zf):
     """Initialize photon using the hyperboloid focusing method."""
@@ -59,19 +58,26 @@ def LaunchHyperboloidPhoton(zf):
         "ux": ux, "uy": uy, "uz": uz,
         "w": 1.0, 
         "dead": False,
-        "scatters": 0
+        "s": 0.0,
+        "sleft": 0.0,
+        "n_scatter": 0,
+        "has_crossed_focal": False,
     }
 
 def StepSizeInTissue():
     return -math.log(max(random.random(), 1e-100))
 
-def Spin(photon):
-    photon["scatters"] += 1
-    if g == 0.0:
+def Hop(photon, s):
+    photon["x"] += s * photon["ux"]
+    photon["y"] += s * photon["uy"]
+    photon["z"] += s * photon["uz"]
+
+def Spin(photon, g_val):
+    if g_val == 0.0:
         cos_theta = 2.0 * random.random() - 1.0
     else:
-        temp = (1.0 - g*g) / (1.0 - g + 2.0 * g * random.random())
-        cos_theta = (1.0 + g*g - temp*temp) / (2.0 * g)
+        temp = (1.0 - g_val*g_val) / (1.0 - g_val + 2.0 * g_val * random.random())
+        cos_theta = (1.0 + g_val*g_val - temp*temp) / (2.0 * g_val)
 
     cos_theta = max(-1.0, min(1.0, cos_theta))
     sin_theta = math.sqrt(max(0.0, 1.0 - cos_theta*cos_theta))
@@ -91,6 +97,29 @@ def Spin(photon):
         photon["uy"] = (sin_theta * (uy * uz * cos_psi + ux * sin_psi)) / temp + uy * cos_theta
         photon["uz"] = -sin_theta * cos_psi * temp + uz * cos_theta
 
+def Spin_counted_safe(photon, g_val):
+    if g_val >= 1.0 - 1e-9:
+        photon["n_scatter"] += 1
+        return
+    Spin(photon, g_val)
+    photon["n_scatter"] += 1
+
+def Drop_2d(photon, mu_a_val, mu_t_val, fluence_grid, dr_val, dz_val):
+    dw = photon["w"] * (mu_a_val / mu_t_val)
+    photon["w"] -= dw
+
+    r = math.sqrt(photon["x"] ** 2 + photon["y"] ** 2)
+    ir = int(r / dr_val)
+    iz = int(photon["z"] / dz_val)
+
+    if 0 <= ir < fluence_grid.shape[0] and 0 <= iz < fluence_grid.shape[1]:
+        fluence_grid[ir, iz] += dw
+
+def CrossUpOrNot(photon, n_tissue, n_ambient, scratch):
+    photon["dead"] = True
+    scratch["total_reflectance"] += photon["w"]
+    photon["w"] = 0.0
+
 def Roulette(photon):
     if photon["w"] < THRESHOLD:
         if random.random() <= 1.0 / CHANCE:
@@ -99,62 +128,121 @@ def Roulette(photon):
             photon["w"] = 0.0
             photon["dead"] = True
 
+def main_photon_loop_fig3(
+    photon,
+    n_tissue,
+    n_ambient,
+    mu_a_val,
+    mu_s_val,
+    g_val,
+    fluence_grid,
+    dr_val,
+    dz_val,
+    z_f,
+    z_max,
+    focal_r_list,
+    focal_n_list,
+    scratch,
+):
+    mu_t_val = mu_a_val + mu_s_val
+
+    while not photon["dead"]:
+        if photon["sleft"] == 0.0:
+            photon["s"] = StepSizeInTissue()
+        else:
+            photon["s"] = photon["sleft"]
+            photon["sleft"] = 0.0
+        step_physical = photon["s"] / mu_t_val
+
+        d_top = 1e30
+        d_bottom = 1e30
+        d_focal = 1e30
+
+        if photon["uz"] < 0.0 and photon["z"] > 0.0:
+            d_top = photon["z"] / abs(photon["uz"])
+
+        if photon["uz"] > 0.0:
+            d_bottom = (z_max - photon["z"]) / photon["uz"]
+
+        if (
+            not photon["has_crossed_focal"]
+            and photon["uz"] > 0.0
+            and photon["z"] < z_f
+        ):
+            d_focal = (z_f - photon["z"]) / photon["uz"]
+
+        hit_top = step_physical > d_top
+        hit_bottom = step_physical > d_bottom
+        hit_focal = step_physical > d_focal
+
+        d_min = min(
+            d_top if hit_top else 1e30,
+            d_bottom if hit_bottom else 1e30,
+            d_focal if hit_focal else 1e30,
+        )
+
+        if hit_top and d_min == d_top:
+            Hop(photon, d_top)
+            photon["sleft"] = (step_physical - d_top) * mu_t_val
+            CrossUpOrNot(photon, n_tissue, n_ambient, scratch)
+
+        elif hit_bottom and d_min == d_bottom:
+            Hop(photon, d_bottom)
+            photon["dead"] = True
+
+        elif hit_focal and d_min == d_focal:
+            Hop(photon, d_focal)
+            r_focal = math.sqrt(photon["x"] ** 2 + photon["y"] ** 2)
+            focal_r_list.append(r_focal)
+            focal_n_list.append(photon["n_scatter"])
+            photon["has_crossed_focal"] = True
+            photon["sleft"] = (step_physical - d_focal) * mu_t_val
+
+        else:
+            Hop(photon, step_physical)
+            Drop_2d(photon, mu_a_val, mu_t_val, fluence_grid, dr_val, dz_val)
+            if not photon["dead"]:
+                Spin_counted_safe(photon, g_val)
+                Roulette(photon)
+
 def run_focused_simulation(zf, N_photons, simulate_scattering=True):
     fluence_grid = np.zeros((Nr, Nz))
-    scatter_sum = np.zeros((Nr, Nz))
-    scatter_weight = np.zeros((Nr, Nz))
+    focal_r_list = []
+    focal_n_list = []
+    scratch = {"total_reflectance": 0.0}
 
     local_mu_s = mu_s if simulate_scattering else 0.0
-    local_mu_t = mu_a + local_mu_s
+    
+    print_interval = max(1, N_photons // 10)
 
-    for _ in range(N_photons):
+    for i in range(N_photons):
+        if (i + 1) % print_interval == 0:
+            print(f"  ...processed {i + 1:,} / {N_photons:,} packets ({(i + 1) / N_photons * 100:.0f}%)")
+
         photon = LaunchHyperboloidPhoton(zf)
-
-        while not photon["dead"]:
-            s = StepSizeInTissue()
-            step_physical = s / local_mu_t
-
-            # Exact Boundary Escape Logic (Index Matched)
-            if photon["uz"] < 0.0:
-                d_boundary = photon["z"] / abs(photon["uz"])
-                if step_physical > d_boundary:
-                    photon["x"] += d_boundary * photon["ux"]
-                    photon["y"] += d_boundary * photon["uy"]
-                    photon["z"] = 0.0
-                    photon["dead"] = True
-                    continue
-
-            photon["x"] += step_physical * photon["ux"]
-            photon["y"] += step_physical * photon["uy"]
-            photon["z"] += step_physical * photon["uz"]
-
-            dw = photon["w"] * (mu_a / local_mu_t)
-            photon["w"] -= dw
-
-            ir = int(math.sqrt(photon["x"]**2 + photon["y"]**2) / dr)
-            iz = int(photon["z"] / dz)
-
-            if 0 <= ir < Nr and 0 <= iz < Nz:
-                fluence_grid[ir, iz] += dw
-                scatter_sum[ir, iz] += dw * photon["scatters"]
-                scatter_weight[ir, iz] += dw
-
-            if photon["w"] <= 0.0:
-                photon["dead"] = True
-            else:
-                if simulate_scattering:
-                    Spin(photon)
-                Roulette(photon)
+        main_photon_loop_fig3(
+            photon, 
+            n_tissue=1.33, 
+            n_ambient=1.33, 
+            mu_a_val=mu_a, 
+            mu_s_val=local_mu_s, 
+            g_val=g, 
+            fluence_grid=fluence_grid, 
+            dr_val=dr, 
+            dz_val=dz, 
+            z_f=zf, 
+            z_max=Nz * dz, 
+            focal_r_list=focal_r_list, 
+            focal_n_list=focal_n_list, 
+            scratch=scratch
+        )
 
     # Volumetric Normalization
     for ir in range(Nr):
         V = 2.0 * math.pi * (ir + 0.5) * (dr**2) * dz
         fluence_grid[ir, :] /= (mu_a * V * N_photons)
 
-    # Calculate weighted average of scatters per voxel safely
-    scatters_avg = np.divide(scatter_sum, scatter_weight, out=np.zeros_like(scatter_sum), where=scatter_weight!=0)
-
-    return fluence_grid, scatters_avg
+    return fluence_grid, focal_r_list, focal_n_list
 
 # --- Execution & Plotting ---
 N_PACKETS = 10000 
@@ -162,13 +250,13 @@ zf_values = [0.1, 0.3, 0.5, 0.7, 0.9, 1.1, 1.3, 1.5, 1.7, 3.0]
 
 results = {}
 for zf_lt in zf_values:
-    print(f"Tracking packets for focal depth zf = {zf_lt} lt'...")
+    print(f"\n--- Tracking packets for focal depth zf = {zf_lt} lt' ---")
     zf_um = zf_lt * lt_prime
-    F, S = run_focused_simulation(zf_um, N_PACKETS)
-    results[zf_lt] = {"F": F, "S": S, "iz_f": int(zf_um / dz)}
+    F, R_list, N_list = run_focused_simulation(zf_um, N_PACKETS)
+    results[zf_lt] = {"F": F, "R_list": R_list, "N_list": N_list, "iz_f": int(zf_um / dz)}
 
-print("Computing analytical no-scattering baseline...")
-F_noscatter, _ = run_focused_simulation(1.0 * lt_prime, N_PACKETS, simulate_scattering=False)
+print("\n--- Computing analytical no-scattering baseline ---")
+F_noscatter, _, _ = run_focused_simulation(1.0 * lt_prime, N_PACKETS, simulate_scattering=False)
 
 fig, axs = plt.subplots(2, 2, figsize=(12, 10))
 
@@ -210,6 +298,10 @@ F_sym_base = np.concatenate((F_baseline[::-1], F_baseline)) / max_baseline
 ax.plot(x_arr, F_sym_base, 'k--', label="No scattering")
 ax_b.plot(x_arr, F_sym_base, 'k--', label="No scattering")
 
+# Setup for Plot (c) exact binning logic
+R_BINS_UM = np.linspace(0, 5, 26) # Bin boundaries from 0 to 5 um
+r_centers = 0.5 * (R_BINS_UM[:-1] + R_BINS_UM[1:])
+
 for zf_lt in zf_values:
     data = results[zf_lt]
     F_focal = data["F"][:, data["iz_f"]]
@@ -221,9 +313,17 @@ for zf_lt in zf_values:
     ax_b.plot(x_arr, F_sym, label=f"zf = {zf_lt} lt'")
 
     if zf_lt <= 1.7:
-        ax_c.plot(r_arr, data["S"][:, data["iz_f"]], label=f"zf = {zf_lt} lt'")
+        # Evaluate Plot (c) by binning the exact recorded scatter events at the focal plane bounds
+        f_r_arr = np.array(data["R_list"])
+        f_n_arr = np.array(data["N_list"])
+        mean_ns = []
+        for i in range(len(R_BINS_UM) - 1):
+            mask = (f_r_arr >= R_BINS_UM[i]) & (f_r_arr < R_BINS_UM[i + 1])
+            mean_ns.append(f_n_arr[mask].mean() if mask.any() else 0.0)
+            
+        ax_c.plot(r_centers, mean_ns, label=f"zf = {zf_lt} lt'")
         
-        # Strictly on-axis calculation, zero spatial smoothing
+        # Plot (d) 
         on_axis = np.copy(data["F"][0, :])
         on_axis[on_axis <= 0] = np.nan 
         ax_d.plot(z_axis_lt, on_axis, label=f"zf = {zf_lt} lt'")
